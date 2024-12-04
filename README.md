@@ -14,7 +14,7 @@
 
 - Install Flask in the virtual environment:
 
-`(flask_env) $ pip install Flask`
+`(flask_env)$ pip install Flask`
 
 - Run the app:
 
