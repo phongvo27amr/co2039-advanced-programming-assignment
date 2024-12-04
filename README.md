@@ -1,3 +1,5 @@
+# Setting up the environment
+
 - Install a virtual environment:
 
 `$ sudo apt install python3-venv`
