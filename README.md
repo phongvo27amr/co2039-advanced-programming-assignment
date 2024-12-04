@@ -23,3 +23,7 @@
 - To exit the virtual environment:
 
 `(flask_env)$ deactivate`
+
+# Launching the application
+
+Open the browser and go to http://localhost:5000/
