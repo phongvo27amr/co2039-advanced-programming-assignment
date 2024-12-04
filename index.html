@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSV Search Interface</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+  <div class="container mt-5">
+    <h1 class="text-center">Search CSV Data</h1>
+    <form id="searchForm" class="mt-4">
+      <div id="formFields" class="row"></div>
+      <button type="submit" class="btn btn-primary mt-3">Search</button>
+    </form>
+    <div id="loadingMessage" class="mt-3 text-info" style="display: none;">
+      <p><strong>Searching...</strong></p>
+    </div>
+    <div id="recordCount" class="mt-3 text-success" style="display: none;"></div>
+    <div id="results" class="mt-5"></div>
+  </div>
+
+  <script>
+    async function loadColumns() {
+      try {
+        const response = await fetch('/columns');
+        const data = await response.json();
+        const formFields = document.getElementById('formFields');
+
+        if (data.columns) {
+          data.columns.forEach(column => {
+            const colDiv = document.createElement('div');
+            colDiv.classList.add('col-md-6', 'mb-3');
+
+            const label = document.createElement('label');
+            label.classList.add('form-label');
+
+            switch (column) {
+              case 'date_time':
+                label.innerText = 'Date and Time';
+                break;
+              case 'trans_no':
+                label.innerText = 'Transaction Number';
+                break;
+              case 'credit':
+                label.innerText = 'Credit Amount';
+                break;
+              case 'debit':
+                label.innerText = 'Debit Amount';
+                break;
+              case 'detail':
+                label.innerText = 'Transaction Detail';
+                break;
+              default:
+                label.innerText = column;
+            }
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.name = column;
+
+            switch (column) {
+              case 'credit':
+                input.placeholder = 'Enter a range (e.g., 100-100 or 100-500)';
+                break;
+              case 'date_time':
+                input.placeholder = 'Enter date (e.g., 2024/12/03)';
+                break;
+              case 'trans_no':
+                input.placeholder = 'Enter transaction number';
+                break;
+              case 'debit':
+                input.placeholder = 'Enter debit amount';
+                break;
+              case 'detail':
+                input.placeholder = 'Enter transaction detail';
+                break;
+              default:
+                input.placeholder = `Enter value for ${column}`;
+            }
+
+            input.classList.add('form-control');
+            colDiv.appendChild(label);
+            colDiv.appendChild(input);
+            formFields.appendChild(colDiv);
+          });
+        } else {
+          formFields.innerHTML = '<p class="text-danger">Failed to load columns.</p>';
+        }
+      } catch (error) {
+        console.error('Error loading columns:', error);
+      }
+    }
+
+    // Sorting
+    function sortTable(table, columnIndex, ascending) {
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      const sortedRows = rows.sort((rowA, rowB) => {
+        const cellA = rowA.cells[columnIndex].innerText;
+        const cellB = rowB.cells[columnIndex].innerText;
+
+        // If numeric (for columns like credit or debit)
+        const isNumeric = !isNaN(cellA) && !isNaN(cellB);
+
+        let comparison = 0;
+        if (isNumeric) {
+          comparison = parseFloat(cellA) - parseFloat(cellB);
+        } else {
+          comparison = cellA.localeCompare(cellB);
+        }
+
+        return ascending ? comparison : -comparison;
+      });
+
+      // Reattach the rows in sorted order
+      sortedRows.forEach(row => table.querySelector('tbody').appendChild(row));
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', async function (event) {
+      event.preventDefault();
+
+      const loadingMessage = document.getElementById('loadingMessage');
+      const resultsDiv = document.getElementById('results');
+      const recordCountDiv = document.getElementById('recordCount');
+
+      resultsDiv.innerHTML = ''; // Clear previous results
+      recordCountDiv.innerHTML = ''; // Clear previous record count
+      loadingMessage.style.display = 'block'; // Show "Searching..." message
+
+      const formData = new FormData(event.target);
+      const query = new URLSearchParams();
+
+      for (const [key, value] of formData.entries()) {
+        if (value.trim()) {
+          if (key === 'credit') {
+            const creditValues = value.split('-').map(v => v.trim());
+            if (creditValues.length === 1) {
+              // Exact match for single value
+              query.append(key, creditValues[0]);
+            } else if (creditValues.length === 2) {
+              // Range match
+              query.append(`${key}_min`, creditValues[0]);
+              query.append(`${key}_max`, creditValues[1]);
+            }
+          } else {
+            query.append(key, value.trim());
+          }
+        }
+      }
+
+      try {
+        const response = await fetch(`/query?${query.toString()}`);
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0) {
+          recordCountDiv.style.display = 'block';
+          recordCountDiv.innerHTML = `<p><strong>${data.results.length}</strong> record(s) found.</p>`;
+
+          const table = document.createElement('table');
+          table.classList.add('table', 'table-bordered', 'table-striped');
+
+          const thead = document.createElement('thead');
+          const headerRow = document.createElement('tr');
+          Object.keys(data.results[0]).forEach((key, index) => {
+            const th = document.createElement('th');
+            th.innerText = key;
+            th.style.cursor = 'pointer';
+
+            // Add click event to each header cell for sorting
+            th.addEventListener('click', function () {
+              const ascending = th.dataset.sortOrder === 'desc' ? true : false;
+              th.dataset.sortOrder = ascending ? 'asc' : 'desc';
+              sortTable(table, index, ascending);
+            });
+
+            headerRow.appendChild(th);
+          });
+          thead.appendChild(headerRow);
+          table.appendChild(thead);
+
+          const tbody = document.createElement('tbody');
+          data.results.forEach(row => {
+            const tr = document.createElement('tr');
+            Object.values(row).forEach(value => {
+              const td = document.createElement('td');
+              td.innerText = value;
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          resultsDiv.appendChild(table);
+        } else {
+          recordCountDiv.style.display = 'block';
+          recordCountDiv.innerHTML = '<p class="text-warning">No records found.</p>';
+        }
+      } catch (error) {
+        resultsDiv.innerHTML = '<p class="text-danger">An error occurred while searching.</p>';
+      } finally {
+        loadingMessage.style.display = 'none'; // Hide "Searching..." message
+      }
+    });
+
+    window.onload = loadColumns;
+  </script>
+</body>
+
+</html>
