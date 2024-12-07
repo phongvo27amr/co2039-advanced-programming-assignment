@@ -39,7 +39,7 @@
 
             switch (column) {
               case 'date_time':
-                label.innerText = 'Date and Time';
+                label.innerText = 'Date';
                 break;
               case 'trans_no':
                 label.innerText = 'Transaction Number';
@@ -66,7 +66,7 @@
                 input.placeholder = 'Enter a range (e.g., 100-100 or 100-500)';
                 break;
               case 'date_time':
-                input.placeholder = 'Enter date (e.g., 2024/12/03)';
+                input.placeholder = 'Enter date (e.g., 09/09/2024)';
                 break;
               case 'trans_no':
                 input.placeholder = 'Enter transaction number';
@@ -84,6 +84,14 @@
             input.classList.add('form-control');
             colDiv.appendChild(label);
             colDiv.appendChild(input);
+
+            // Create an error message container
+            const errorMessage = document.createElement('div');
+            errorMessage.classList.add('text-danger');
+            errorMessage.style.display = 'none';  // Hide error message by default
+            errorMessage.id = column + '-error';
+            colDiv.appendChild(errorMessage);
+
             formFields.appendChild(colDiv);
           });
         } else {
@@ -94,33 +102,54 @@
       }
     }
 
-    // Sorting
-    function sortTable(table, columnIndex, ascending) {
-      const rows = Array.from(table.querySelectorAll('tbody tr'));
-      const sortedRows = rows.sort((rowA, rowB) => {
-        const cellA = rowA.cells[columnIndex].innerText;
-        const cellB = rowB.cells[columnIndex].innerText;
-
-        // If numeric (for columns like credit or debit)
-        const isNumeric = !isNaN(cellA) && !isNaN(cellB);
-
-        let comparison = 0;
-        if (isNumeric) {
-          comparison = parseFloat(cellA) - parseFloat(cellB);
-        } else {
-          comparison = cellA.localeCompare(cellB);
-        }
-
-        return ascending ? comparison : -comparison;
-      });
-
-      // Reattach the rows in sorted order
-      sortedRows.forEach(row => table.querySelector('tbody').appendChild(row));
-    }
-
-    document.getElementById('searchForm').addEventListener('submit', async function (event) {
+    document.getElementById('searchForm').addEventListener('submit', function (event) {
       event.preventDefault();
 
+      // Clear previous error messages
+      const errorMessages = document.querySelectorAll('.text-danger');
+      errorMessages.forEach(error => error.style.display = 'none');
+
+      const creditInput = document.querySelector('input[name="credit"]');
+      const creditValue = creditInput.value.trim();
+      let isValid = true;
+
+      if (creditValue) {
+        if (creditValue.includes('-')) {
+          const [min, max] = creditValue.split('-').map(v => parseFloat(v.trim()));
+
+          if (isNaN(min) || isNaN(max)) {
+            isValid = false;
+            document.getElementById('credit-error').innerText = "Invalid credit range format. Please enter numbers.";
+            document.getElementById('credit-error').style.display = 'block';
+          } else if (min < 0 || max < 0) {
+            isValid = false;
+            document.getElementById('credit-error').innerText = "Credit range values cannot be negative.";
+            document.getElementById('credit-error').style.display = 'block';
+          } else if (min > max) {
+            isValid = false;
+            document.getElementById('credit-error').innerText = "Min value must be less than or equal to max value.";
+            document.getElementById('credit-error').style.display = 'block';
+          }
+        } else {
+          const value = parseFloat(creditValue);
+
+          if (isNaN(value)) {
+            isValid = false;
+            document.getElementById('credit-error').innerText = "Invalid credit value. Please enter a number.";
+            document.getElementById('credit-error').style.display = 'block';
+          } else if (value < 0) {
+            isValid = false;
+            document.getElementById('credit-error').innerText = "Credit value cannot be negative.";
+            document.getElementById('credit-error').style.display = 'block';
+          }
+        }
+      }
+
+      if (!isValid) {
+        return; // Prevent form submission if validation fails
+      }
+
+      // If validation passes, continue with the search logic
       const loadingMessage = document.getElementById('loadingMessage');
       const resultsDiv = document.getElementById('results');
       const recordCountDiv = document.getElementById('recordCount');
@@ -135,7 +164,7 @@
       for (const [key, value] of formData.entries()) {
         if (value.trim()) {
           if (key === 'credit') {
-            const creditValues = value.split('-').map(v => v.trim());
+            const creditValues = value.split(',').map(v => v.trim());
             if (creditValues.length === 1) {
               // Exact match for single value
               query.append(key, creditValues[0]);
@@ -150,57 +179,49 @@
         }
       }
 
-      try {
-        const response = await fetch(`/query?${query.toString()}`);
-        const data = await response.json();
+      fetch(`/query?${query.toString()}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.results && data.results.length > 0) {
+            recordCountDiv.style.display = 'block';
+            recordCountDiv.innerHTML = `<p><strong>${data.results.length}</strong> record(s) found.</p>`;
 
-        if (data.results && data.results.length > 0) {
-          recordCountDiv.style.display = 'block';
-          recordCountDiv.innerHTML = `<p><strong>${data.results.length}</strong> record(s) found.</p>`;
+            const table = document.createElement('table');
+            table.classList.add('table', 'table-bordered', 'table-striped');
 
-          const table = document.createElement('table');
-          table.classList.add('table', 'table-bordered', 'table-striped');
-
-          const thead = document.createElement('thead');
-          const headerRow = document.createElement('tr');
-          Object.keys(data.results[0]).forEach((key, index) => {
-            const th = document.createElement('th');
-            th.innerText = key;
-            th.style.cursor = 'pointer';
-
-            // Add click event to each header cell for sorting
-            th.addEventListener('click', function () {
-              const ascending = th.dataset.sortOrder === 'desc' ? true : false;
-              th.dataset.sortOrder = ascending ? 'asc' : 'desc';
-              sortTable(table, index, ascending);
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            Object.keys(data.results[0]).forEach(key => {
+              const th = document.createElement('th');
+              th.innerText = key;
+              headerRow.appendChild(th);
             });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
 
-            headerRow.appendChild(th);
-          });
-          thead.appendChild(headerRow);
-          table.appendChild(thead);
-
-          const tbody = document.createElement('tbody');
-          data.results.forEach(row => {
-            const tr = document.createElement('tr');
-            Object.values(row).forEach(value => {
-              const td = document.createElement('td');
-              td.innerText = value;
-              tr.appendChild(td);
+            const tbody = document.createElement('tbody');
+            data.results.forEach(row => {
+              const tr = document.createElement('tr');
+              Object.values(row).forEach(value => {
+                const td = document.createElement('td');
+                td.innerText = value;
+                tr.appendChild(td);
+              });
+              tbody.appendChild(tr);
             });
-            tbody.appendChild(tr);
-          });
-          table.appendChild(tbody);
-          resultsDiv.appendChild(table);
-        } else {
-          recordCountDiv.style.display = 'block';
-          recordCountDiv.innerHTML = '<p class="text-warning">No records found.</p>';
-        }
-      } catch (error) {
-        resultsDiv.innerHTML = '<p class="text-danger">An error occurred while searching.</p>';
-      } finally {
-        loadingMessage.style.display = 'none'; // Hide "Searching..." message
-      }
+            table.appendChild(tbody);
+            resultsDiv.appendChild(table);
+          } else {
+            recordCountDiv.style.display = 'block';
+            recordCountDiv.innerHTML = '<p class="text-warning">No records found.</p>';
+          }
+        })
+        .catch(error => {
+          resultsDiv.innerHTML = '<p class="text-danger">An error occurred while searching.</p>';
+        })
+        .finally(() => {
+          loadingMessage.style.display = 'none'; // Hide "Searching..." message
+        });
     });
 
     window.onload = loadColumns;
