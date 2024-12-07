@@ -63,7 +63,7 @@
 
             switch (column) {
               case 'credit':
-                input.placeholder = 'Enter a range (e.g., 100-100 or 100-500)';
+                input.placeholder = 'Enter a single or a range value (e.g., 50000 or 50000-100000)';
                 break;
               case 'date_time':
                 input.placeholder = 'Enter date (e.g., 09/09/2024)';
@@ -108,10 +108,13 @@
       // Clear previous error messages
       const errorMessages = document.querySelectorAll('.text-danger');
       errorMessages.forEach(error => error.style.display = 'none');
+      const errorCredit = document.querySelectorAll('.credit-error');
+      errorCredit.forEach(error => error.style.display = 'none');
+
+      let isValid = true;
 
       const creditInput = document.querySelector('input[name="credit"]');
       const creditValue = creditInput.value.trim();
-      let isValid = true;
 
       if (creditValue) {
         if (creditValue.includes('-')) {
@@ -142,6 +145,25 @@
             document.getElementById('credit-error').innerText = "Credit value cannot be negative.";
             document.getElementById('credit-error').style.display = 'block';
           }
+        }
+      }
+
+      const dateInput = document.querySelector('input[name="date_time"]');
+      const dateValue = dateInput.value.trim();
+
+      if (dateValue) {
+        const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/; // Validate DD/MM/YYYY format
+        const inputField = document.querySelector(`[name="date_time"]`);
+        const errorMessage = document.createElement('div');
+
+        if (!dateRegex.test(dateValue)) {
+          inputField.classList.add('is-invalid');
+          errorMessage.classList.add('invalid-feedback');
+          errorMessage.textContent = 'Invalid date format. Use DD/MM/YYYY.';
+          inputField.parentNode.appendChild(errorMessage);
+          isValid = false;
+        } else {
+          inputField.classList.remove('is-invalid');
         }
       }
 
