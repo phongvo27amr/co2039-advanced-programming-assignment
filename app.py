@@ -1,6 +1,7 @@
-from flask import Flask, request, jsonify, send_from_directory
 import csv
 import os
+from flask import Flask, request, jsonify, send_from_directory
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -35,24 +36,29 @@ def search():
   search_conditions = {}
 
   for key, value in request.args.items():
-    if key.lower() == 'credit':
+    if key.lower() == 'credit':  # Handle credit column differently
       if '-' in value:
         try:
           min_value, max_value = map(float, value.split('-'))
-          if min_value < 0 or max_value < 0:
-            return jsonify({"error": "Credit range cannot contain negative numbers"}), 400
-          if min_value > max_value:
-            return jsonify({"error": "Min value must be less than or equal to max value"}), 400
+          if min_value > max_value:  # Validate range logic
+            return jsonify({"error": f"Invalid range for {key}. Min value must be less than or equal to max value."}), 400
           search_conditions[key] = (min_value, max_value)
         except ValueError:
-          return jsonify({"error": "Invalid credit range format"}), 400
+          return jsonify({"error": f"Invalid range format for {key}. Use min-max format, e.g., 10000-20000."}), 400
       else:
         try:
-          if float(value) < 0:
-            return jsonify({"error": "Credit value cannot be negative"}), 400
-          search_conditions[key] = value
+          min_value = float(value)
+          search_conditions[key] = (min_value, min_value)  # Treat single value as exact match
         except ValueError:
-          return jsonify({"error": "Invalid credit value"}), 400
+          return jsonify({"error": f"Invalid number format for {key}. Ensure it is a numeric value."}), 400
+
+    # Validate date_time format
+    elif key.lower() == 'date_time':
+      try:
+        datetime.strptime(value, '%d/%m/%Y')  # Check if the date is in DD/MM/YYYY
+        search_conditions[key] = value
+      except ValueError:
+        return jsonify({"error": f"Invalid date format for {key}. Use DD/MM/YYYY format."}), 400
     else:
       search_conditions[key] = value
 
