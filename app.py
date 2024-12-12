@@ -21,6 +21,7 @@ def preload_csv(file_path):
 # Filter data using pandas
 def filter_data(conditions):
   global data_df
+
   if data_df is None:
     return []
 
@@ -35,6 +36,13 @@ def filter_data(conditions):
         filtered_df = filtered_df[filtered_df['credit'] == value]
     elif column == 'date_time':
       filtered_df = filtered_df[filtered_df['date_time'].str.contains(value, na=False)]
+    elif column == 'trans_no':
+      try:
+        value = int(value) # Ensure the input is numeric
+        filtered_df = filtered_df[filtered_df['trans_no'] == value]
+      except ValueError:
+        # If value is not a valid number, skip filtering this column
+        continue
     else:
       filtered_df = filtered_df[filtered_df[column].str.contains(value, na=False, case=False)]
 
