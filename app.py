@@ -1,19 +1,44 @@
-import csv
-import os
 from flask import Flask, request, jsonify, send_from_directory
-from datetime import datetime
+import pandas as pd
+import os
 
 app = Flask(__name__)
 
-# Function to read columns from the CSV file
-def read_columns(file_path):
+# Global DataFrame to store preloaded CSV data
+data_df = None
+
+# Load CSV data into a pandas DataFrame during app startup
+def preload_csv(file_path):
+  global data_df
   try:
-    with open(file_path, mode='r', newline='', encoding='utf-8-sig') as file:
-      reader = csv.DictReader(file)
-      columns = reader.fieldnames  # Get column names from the CSV header
-      return columns
+    data_df = pd.read_csv(file_path, encoding='utf-8-sig')
+    print(f"Data loaded: {len(data_df)} rows")
+    return list(data_df.columns)
   except Exception as e:
-    return str(e)
+    print(f"Error loading CSV: {e}")
+    return []
+
+# Filter data using pandas
+def filter_data(conditions):
+  global data_df
+  if data_df is None:
+    return []
+
+  filtered_df = data_df.copy()
+
+  for column, value in conditions.items():
+    if column == 'credit':
+      if isinstance(value, tuple): # Range query
+        min_value, max_value = value
+        filtered_df = filtered_df[(filtered_df['credit'] >= min_value) & (filtered_df['credit'] <= max_value)]
+      else: # Single value
+        filtered_df = filtered_df[filtered_df['credit'] == value]
+    elif column == 'date_time':
+      filtered_df = filtered_df[filtered_df['date_time'].str.contains(value, na=False)]
+    else:
+      filtered_df = filtered_df[filtered_df[column].str.contains(value, na=False, case=False)]
+
+  return filtered_df.to_dict(orient='records')
 
 # Endpoint to serve the index.html file
 @app.route('/')
@@ -23,80 +48,45 @@ def serve_index():
 # Endpoint to get CSV column names
 @app.route('/columns', methods=['GET'])
 def get_columns():
-  file_path = 'chuyen_khoan.csv'
-  columns = read_columns(file_path)
-  if isinstance(columns, str):
-    return jsonify({"error": columns}), 500
-  return jsonify({"columns": columns})
+  global data_df
+  if data_df is None:
+    return jsonify({"error": "Data not loaded"}), 500
+  return jsonify({"columns": list(data_df.columns)})
 
 # Endpoint to search CSV data
 @app.route('/query', methods=['GET'])
 def search():
-  file_path = 'chuyen_khoan.csv'  # Fixed file name
+  global data_df
+
+  if data_df is None:
+    return jsonify({"error": "Data not loaded"}), 500
+
   search_conditions = {}
 
   for key, value in request.args.items():
-    if key.lower() == 'credit':  # Handle credit column differently
-      if '-' in value:
-        try:
-          min_value, max_value = map(float, value.split('-'))
-          if min_value > max_value:  # Validate range logic
-            return jsonify({"error": f"Invalid range for {key}. Min value must be less than or equal to max value."}), 400
-          search_conditions[key] = (min_value, max_value)
-        except ValueError:
-          return jsonify({"error": f"Invalid range format for {key}. Use min-max format, e.g., 10000-20000."}), 400
-      else:
-        try:
-          min_value = float(value)
-          search_conditions[key] = (min_value, min_value)  # Treat single value as exact match
-        except ValueError:
-          return jsonify({"error": f"Invalid number format for {key}. Ensure it is a numeric value."}), 400
-
-    # Validate date_time format
-    elif key.lower() == 'date_time':
+    if key.lower() == 'credit':
       try:
-        datetime.strptime(value, '%d/%m/%Y')  # Check if the date is in DD/MM/YYYY
-        search_conditions[key] = value
+        if '-' in value:
+          min_value, max_value = map(float, value.split('-'))
+          if min_value > max_value:
+            return jsonify({"error": "Invalid range: min_value cannot be greater than max_value"}), 400
+          search_conditions[key] = (min_value, max_value)
+        else:
+          search_conditions[key] = float(value) # Single value
       except ValueError:
-        return jsonify({"error": f"Invalid date format for {key}. Use DD/MM/YYYY format."}), 400
+          return jsonify({"error": "Invalid credit value"}), 400
+    elif key.lower() == 'date_time':
+        if not pd.Series([value]).str.match(r'\d{2}/\d{2}/\d{4}').bool():
+            return jsonify({"error": "Invalid date_time format. Use DD/MM/YYYY."}), 400
+        search_conditions[key] = value
     else:
-      search_conditions[key] = value
+        search_conditions[key] = value
 
-  if not search_conditions:
-    return jsonify({"error": "No search conditions provided"}), 400
+  results = filter_data(search_conditions)
 
-  results = search_csv(file_path, search_conditions)
-  if isinstance(results, str):  # Error handling
-    return jsonify({"error": results}), 500
-
-  return jsonify({"results": results})
-
-def search_csv(file_path, search_conditions):
-  try:
-    with open(file_path, mode='r', newline='', encoding='utf-8-sig') as file:
-      reader = csv.DictReader(file)
-      results = []
-
-      for row in reader:
-        match = True
-        for column_name, search_term in search_conditions.items():
-          if column_name in row:
-            if column_name.lower() == 'credit':
-              min_value, max_value = search_term
-              credit_value = float(row[column_name])
-              if not (min_value <= credit_value <= max_value):
-                match = False
-                break
-            else:
-              if search_term.lower() not in row[column_name].lower():
-                match = False
-                break
-        if match:
-          results.append(row)
-
-      return results
-  except Exception as e:
-    return str(e)
+  return jsonify({"results": results, "count": len(results)})
 
 if __name__ == '__main__':
+  file_path = 'chuyen_khoan.csv'
+  preload_csv(file_path)
   app.run(debug=True)
