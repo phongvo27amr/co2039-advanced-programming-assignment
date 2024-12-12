@@ -97,4 +97,4 @@ def search():
 if __name__ == '__main__':
   file_path = 'chuyen_khoan.csv'
   preload_csv(file_path)
-  app.run(debug=True)
+  app.run(debug=True, host='0.0.0.0', port=5000)
