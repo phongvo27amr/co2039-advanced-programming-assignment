@@ -1,29 +1,34 @@
-# Setting up the environment
+# Install Docker and Docker Compose
 
-- Install a virtual environment:
+- Verify Docker is installed:
 
-`$ sudo apt install python3-venv`
+```
+docker --version
+docker-compose --version
+```
 
-- Create a virtual environment:
+# Run the app
 
-`$ python3 -m venv flask_env`
+- Clone or download the repository:
 
-- Activate the environment:
+```
+git clone https://github.com/phongvo27amr/co2039-advanced-programming-assignment.git
+cd co2039-advanced-programming-assignment
+```
 
-`$ source flask_env/bin/activate`
+- Build and run the app:
 
-- Install Flask in the virtual environment:
+  - This builds the Docker image and starts the container
+  - The app will be accessible at http://localhost:5000
 
-`(flask_env)$ pip install Flask`
+```
+docker-compose up --build
+```
 
-- Run the app:
+# Stop the app
 
-`(flask_env)$ python3 app.py`
+- Press Ctrl+C in the terminal or use:
 
-- To exit the virtual environment:
-
-`(flask_env)$ deactivate`
-
-# Launching the application
-
-Open the browser and go to http://localhost:5000/
+```
+docker-compose down
+```
