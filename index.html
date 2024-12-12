@@ -4,13 +4,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CSV Search Interface</title>
+  <title>Search Data</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .error-message {
+      color: red;
+      font-size: 0.9em;
+    }
+  </style>
 </head>
 
 <body>
   <div class="container mt-5">
-    <h1 class="text-center">Search CSV Data</h1>
+    <h1 class="text-center">Search Data</h1>
     <form id="searchForm" class="mt-4">
       <div id="formFields" class="row"></div>
       <button type="submit" class="btn btn-primary mt-3">Search</button>
@@ -18,11 +24,23 @@
     <div id="loadingMessage" class="mt-3 text-info" style="display: none;">
       <p><strong>Searching...</strong></p>
     </div>
-    <div id="recordCount" class="mt-3 text-success" style="display: none;"></div>
+    <div id="recordCount" class="mt-3 text-primary" style="display: none;"></div>
+    <div class="mt-3">
+      <button id="calculateTotalButton" class="btn btn-success" style="display: none;">Calculate Total Credit</button>
+      <div id="totalCredit" class="mt-2 text-success" style="display: none;"></div>
+    </div>
     <div id="results" class="mt-5"></div>
   </div>
 
   <script>
+    const columnLabels = {
+      date_time: { label: "Date and Time", placeholder: "Enter date" },
+      trans_no: { label: "Transaction Number", placeholder: "Enter transaction number" },
+      credit: { label: "Credit Amount", placeholder: "Enter credit amount" },
+      debit: { label: "Debit Amount", placeholder: "Enter debit amount" },
+      detail: { label: "Transaction Detail", placeholder: "Enter transaction detail" }
+    };
+
     async function loadColumns() {
       try {
         const response = await fetch('/columns');
@@ -36,62 +54,21 @@
 
             const label = document.createElement('label');
             label.classList.add('form-label');
-
-            switch (column) {
-              case 'date_time':
-                label.innerText = 'Date';
-                break;
-              case 'trans_no':
-                label.innerText = 'Transaction Number';
-                break;
-              case 'credit':
-                label.innerText = 'Credit Amount';
-                break;
-              case 'debit':
-                label.innerText = 'Debit Amount';
-                break;
-              case 'detail':
-                label.innerText = 'Transaction Detail';
-                break;
-              default:
-                label.innerText = column;
-            }
+            label.innerText = columnLabels[column]?.label || column;
 
             const input = document.createElement('input');
             input.type = 'text';
             input.name = column;
-
-            switch (column) {
-              case 'credit':
-                input.placeholder = 'Enter a single or a range value (e.g., 50000 or 50000-100000)';
-                break;
-              case 'date_time':
-                input.placeholder = 'Enter date (e.g., 09/09/2024)';
-                break;
-              case 'trans_no':
-                input.placeholder = 'Enter transaction number';
-                break;
-              case 'debit':
-                input.placeholder = 'Enter debit amount';
-                break;
-              case 'detail':
-                input.placeholder = 'Enter transaction detail';
-                break;
-              default:
-                input.placeholder = `Enter value for ${column}`;
-            }
-
             input.classList.add('form-control');
+            input.placeholder = columnLabels[column]?.placeholder || `Enter value for ${column}`;
+
+            const errorSpan = document.createElement('span');
+            errorSpan.classList.add('error-message');
+            errorSpan.style.display = 'none';
+
             colDiv.appendChild(label);
             colDiv.appendChild(input);
-
-            // Create an error message container
-            const errorMessage = document.createElement('div');
-            errorMessage.classList.add('text-danger');
-            errorMessage.style.display = 'none';  // Hide error message by default
-            errorMessage.id = column + '-error';
-            colDiv.appendChild(errorMessage);
-
+            colDiv.appendChild(errorSpan);
             formFields.appendChild(colDiv);
           });
         } else {
@@ -102,108 +79,95 @@
       }
     }
 
+    function validateInputs() {
+      let isValid = true;
+      const formFields = document.querySelectorAll('#formFields .form-control');
+      let atLeastOneInput = false;
+
+      formFields.forEach(input => {
+        const name = input.name;
+        const value = input.value.trim();
+        const errorSpan = input.nextElementSibling;
+
+        errorSpan.style.display = 'none';
+        errorSpan.textContent = '';
+
+        if (value) {
+          atLeastOneInput = true; // At least one input has a value
+        }
+
+        if (value) {
+          if (name === 'credit') {
+            if (value.includes('-') && value.indexOf('-') !== 0) {
+              const [min, max] = value.split('-').map(Number);
+              if (isNaN(min) || isNaN(max) || min <= 0 || max <= 0 || min >= max) {
+                errorSpan.textContent = 'Enter a valid range (e.g., 1000-5000 where 1000 < 5000).';
+                errorSpan.style.display = 'block';
+                isValid = false;
+              }
+            } else if (isNaN(Number(value)) || Number(value) <= 0) {
+              errorSpan.textContent = 'Credit must be a positive number.';
+              errorSpan.style.display = 'block';
+              isValid = false;
+            }
+          } else if (name === 'date_time') {
+            const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
+            if (!dateRegex.test(value)) {
+              errorSpan.textContent = 'Date must be in DD/MM/YYYY format.';
+              errorSpan.style.display = 'block';
+              isValid = false;
+            }
+          } else if (name === 'trans_no' || name === 'debit') {
+            if (isNaN(Number(value)) || Number(value) <= 0) {
+              errorSpan.textContent = `${name === 'trans_no' ? 'Transaction number' : 'Debit'} must be a positive number.`;
+              errorSpan.style.display = 'block';
+              isValid = false;
+            }
+          }
+        }
+      });
+
+      // Check if at least one input field has a value
+      if (!atLeastOneInput) {
+        isValid = false;
+        alert('Please fill in at least one field before searching.');
+      }
+
+      return isValid;
+    }
+
     document.getElementById('searchForm').addEventListener('submit', function (event) {
       event.preventDefault();
 
-      // Clear previous error messages
-      const errorMessages = document.querySelectorAll('.text-danger');
-      errorMessages.forEach(error => error.style.display = 'none');
-      const errorCredit = document.querySelectorAll('.credit-error');
-      errorCredit.forEach(error => error.style.display = 'none');
+      const isValid = validateInputs();
+      if (!isValid) return;
 
-      let isValid = true;
-
-      const creditInput = document.querySelector('input[name="credit"]');
-      const creditValue = creditInput.value.trim();
-
-      if (creditValue) {
-        if (creditValue.includes('-')) {
-          const [min, max] = creditValue.split('-').map(v => parseFloat(v.trim()));
-
-          if (isNaN(min) || isNaN(max)) {
-            isValid = false;
-            document.getElementById('credit-error').innerText = "Invalid credit range format. Please enter numbers.";
-            document.getElementById('credit-error').style.display = 'block';
-          } else if (min < 0 || max < 0) {
-            isValid = false;
-            document.getElementById('credit-error').innerText = "Credit range values cannot be negative.";
-            document.getElementById('credit-error').style.display = 'block';
-          } else if (min > max) {
-            isValid = false;
-            document.getElementById('credit-error').innerText = "Min value must be less than or equal to max value.";
-            document.getElementById('credit-error').style.display = 'block';
-          }
-        } else {
-          const value = parseFloat(creditValue);
-
-          if (isNaN(value)) {
-            isValid = false;
-            document.getElementById('credit-error').innerText = "Invalid credit value. Please enter a number.";
-            document.getElementById('credit-error').style.display = 'block';
-          } else if (value < 0) {
-            isValid = false;
-            document.getElementById('credit-error').innerText = "Credit value cannot be negative.";
-            document.getElementById('credit-error').style.display = 'block';
-          }
-        }
-      }
-
-      const dateInput = document.querySelector('input[name="date_time"]');
-      const dateValue = dateInput.value.trim();
-
-      if (dateValue) {
-        const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/; // Validate DD/MM/YYYY format
-        const inputField = document.querySelector(`[name="date_time"]`);
-        const errorMessage = document.createElement('div');
-
-        if (!dateRegex.test(dateValue)) {
-          inputField.classList.add('is-invalid');
-          errorMessage.classList.add('invalid-feedback');
-          errorMessage.textContent = 'Invalid date format. Use DD/MM/YYYY.';
-          inputField.parentNode.appendChild(errorMessage);
-          isValid = false;
-        } else {
-          inputField.classList.remove('is-invalid');
-        }
-      }
-
-      if (!isValid) {
-        return; // Prevent form submission if validation fails
-      }
-
-      // If validation passes, continue with the search logic
       const loadingMessage = document.getElementById('loadingMessage');
       const resultsDiv = document.getElementById('results');
       const recordCountDiv = document.getElementById('recordCount');
+      const calculateTotalButton = document.getElementById('calculateTotalButton');
+      const totalCreditDiv = document.getElementById('totalCredit');
 
       resultsDiv.innerHTML = ''; // Clear previous results
       recordCountDiv.innerHTML = ''; // Clear previous record count
+      totalCreditDiv.style.display = 'none'; // Hide previous total
       loadingMessage.style.display = 'block'; // Show "Searching..." message
+      calculateTotalButton.style.display = 'none'; // Hide calculate button initially
 
       const formData = new FormData(event.target);
       const query = new URLSearchParams();
 
       for (const [key, value] of formData.entries()) {
         if (value.trim()) {
-          if (key === 'credit') {
-            const creditValues = value.split(',').map(v => v.trim());
-            if (creditValues.length === 1) {
-              // Exact match for single value
-              query.append(key, creditValues[0]);
-            } else if (creditValues.length === 2) {
-              // Range match
-              query.append(`${key}_min`, creditValues[0]);
-              query.append(`${key}_max`, creditValues[1]);
-            }
-          } else {
-            query.append(key, value.trim());
-          }
+          query.append(key, value.trim());
         }
       }
 
       fetch(`/query?${query.toString()}`)
         .then(response => response.json())
         .then(data => {
+          loadingMessage.style.display = 'none'; // Hide "Searching..." message
+
           if (data.results && data.results.length > 0) {
             recordCountDiv.style.display = 'block';
             recordCountDiv.innerHTML = `<p><strong>${data.results.length}</strong> record(s) found.</p>`;
@@ -215,7 +179,16 @@
             const headerRow = document.createElement('tr');
             Object.keys(data.results[0]).forEach(key => {
               const th = document.createElement('th');
-              th.innerText = key;
+              th.innerText = columnLabels[key]?.label || key;
+              th.classList.add('sort-icon');
+              th.dataset.column = key; // Add column name to each header cell for sorting
+
+              // Add ascending icon
+              const sortIcon = document.createElement('span');
+              sortIcon.classList.add('sort-arrow');
+              sortIcon.innerHTML = '&#8597;';  // Default icon for sorting
+              th.appendChild(sortIcon);
+
               headerRow.appendChild(th);
             });
             thead.appendChild(headerRow);
@@ -233,17 +206,88 @@
             });
             table.appendChild(tbody);
             resultsDiv.appendChild(table);
+
+            calculateTotalButton.style.display = 'block'; // Show calculate button
           } else {
             recordCountDiv.style.display = 'block';
             recordCountDiv.innerHTML = '<p class="text-warning">No records found.</p>';
           }
+
+          // Add sorting functionality
+          const sortIcons = document.querySelectorAll('.sort-icon');
+          sortIcons.forEach(icon => {
+            icon.addEventListener('click', function () {
+              const column = this.dataset.column;
+              const rows = Array.from(document.querySelectorAll('#results table tbody tr'));
+              const isAscending = this.classList.contains('sorted-asc');
+
+              // Sort rows based on the clicked column
+              rows.sort((rowA, rowB) => {
+                const cellA = rowA.querySelector(`td:nth-child(${Array.from(icon.parentNode.children).indexOf(this) + 1})`).innerText;
+                const cellB = rowB.querySelector(`td:nth-child(${Array.from(icon.parentNode.children).indexOf(this) + 1})`).innerText;
+
+                const valueA = isNaN(cellA) ? cellA : parseFloat(cellA);
+                const valueB = isNaN(cellB) ? cellB : parseFloat(cellB);
+
+                if (valueA < valueB) return isAscending ? 1 : -1;
+                if (valueA > valueB) return isAscending ? -1 : 1;
+                return 0;
+              });
+
+              // Re-append sorted rows to tbody
+              const tbody = document.querySelector('#results table tbody');
+              rows.forEach(row => tbody.appendChild(row));
+
+              // Toggle sorting direction
+              this.classList.toggle('sorted-asc', !isAscending);
+              this.classList.toggle('sorted-desc', isAscending);
+
+              // Update icon
+              const iconSpan = this.querySelector('.sort-arrow');
+              if (isAscending) {
+                iconSpan.innerHTML = '&#8595;';  // Down arrow for descending
+              } else {
+                iconSpan.innerHTML = '&#8593;';  // Up arrow for ascending
+              }
+            });
+          });
         })
         .catch(error => {
-          resultsDiv.innerHTML = '<p class="text-danger">An error occurred while searching.</p>';
-        })
-        .finally(() => {
+          console.error('Error:', error);
           loadingMessage.style.display = 'none'; // Hide "Searching..." message
         });
+    });
+
+    // Updated Total Credit Calculation
+    document.getElementById('calculateTotalButton').addEventListener('click', function () {
+      const rows = document.querySelectorAll('#results table tbody tr');
+      let totalCredit = 0;
+
+      // Get the index of the 'credit' column from the header row
+      const headers = document.querySelectorAll('#results table thead th');
+      let creditColumnIndex = -1;
+
+      headers.forEach((header, index) => {
+        if (header.innerText.toLowerCase().includes('credit')) {
+          creditColumnIndex = index;
+        }
+      });
+
+      if (creditColumnIndex !== -1) {
+        // Loop through each row and sum the credit values
+        rows.forEach(row => {
+          const creditCell = row.cells[creditColumnIndex]; // Get the credit cell from the correct column
+          if (creditCell) {
+            totalCredit += parseFloat(creditCell.innerText.replace(/,/g, '')) || 0;
+          }
+        });
+
+        const totalCreditDiv = document.getElementById('totalCredit');
+        totalCreditDiv.style.display = 'block';
+        totalCreditDiv.innerHTML = `<p><strong>Total Credit:</strong> ${totalCredit.toLocaleString()}</p>`;
+      } else {
+        console.error('Credit column not found');
+      }
     });
 
     window.onload = loadColumns;
