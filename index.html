@@ -58,7 +58,7 @@
 
             const input = document.createElement('input');
             input.type = 'text';
-            input.name = column;
+            input.name = column === 'detail' ? 'q' : column; // Map "detail" to "q"
             input.classList.add('form-control');
             input.placeholder = columnLabels[column]?.placeholder || `Enter value for ${column}`;
 
