@@ -72,7 +72,9 @@ def search():
   search_conditions = {}
 
   for key, value in request.args.items():
-    if key.lower() == 'credit':
+    if key.lower() == 'q': # Query for detail
+      search_conditions['detail'] = value
+    elif key.lower() == 'credit':
       try:
         if '-' in value:
           min_value, max_value = map(float, value.split('-'))
